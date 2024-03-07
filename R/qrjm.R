@@ -1,4 +1,4 @@
-#' \code{qrjm} fits quantile regression joint model
+#'  \code{qrjm} fits quantile regression joint model
 #'
 #' Function using 'JAGS' software via \code{jagsUI} package to estimate the quantile regression joint model assuming asymmetric Laplace distribution for residual error.
 #' Joint modeling concerns longitudinal data and time-to-event
