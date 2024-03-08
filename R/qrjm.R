@@ -410,7 +410,7 @@ alpha.assoc ~ dnorm(0, priorTau.alphaA)
     covariance.b[rr] <- 1/prec.Sigma2[rr]
   }
   beta[1:ncX] ~ dmnorm(priorMean.beta[], priorTau.beta[, ])
-  sigma ~ dgamma(priorA.sigma, priorB.sigma)
+  sigma ~ invgamma::dinvgamma(priorA.sigma, priorB.sigma)
   # priors for survival parameters
   alpha[1:ncZ] ~ dmnorm(priorMean.alpha[], priorTau.alpha[, ])
   shape ~ dgamma(priorA.shape, priorB.shape)
@@ -447,7 +447,7 @@ alpha.assoc ~ dnorm(0, priorTau.alphaA)
   prec.Sigma2[1:ncU, 1:ncU] ~ dwish(priorR.Sigma2[, ], priorK.Sigma2)
   covariance.b <- inverse(prec.Sigma2[, ])
   beta[1:ncX] ~ dmnorm(priorMean.beta[], priorTau.beta[, ])
-  sigma ~ dgamma(priorA.sigma, priorB.sigma)
+  sigma ~ invgamma::dinvgamma(priorA.sigma, priorB.sigma)
   # priors for survival parameters
   alpha[1:ncZ] ~ dmnorm(priorMean.alpha[], priorTau.alpha[, ])
   shape ~ dgamma(priorA.shape, priorB.shape)
