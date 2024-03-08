@@ -1,4 +1,4 @@
-#'  \code{qrjm} fits quantile regression joint model
+#' \code{qrjm} fits quantile regression joint model
 #'
 #' Function using 'JAGS' software via \code{jagsUI} package to estimate the quantile regression joint model assuming asymmetric Laplace distribution for residual error.
 #' Joint modeling concerns longitudinal data and time-to-event
@@ -305,7 +305,7 @@ for(rr in 1:ncU){
   covariance.b[rr] <- 1/prec.Sigma2[rr]
 }
 beta[1:ncX] ~ dmnorm(priorMean.beta[], priorTau.beta[, ])
-sigma ~ dgamma(priorA.sigma, priorB.sigma)
+sigma ~ invgamma::dinvgamma(priorA.sigma, priorB.sigma)
 # priors for survival parameters
 alpha[1:ncZ] ~ dmnorm(priorMean.alpha[], priorTau.alpha[, ])
 shape ~ dgamma(priorA.shape, priorB.shape)
@@ -345,7 +345,7 @@ for (i in 1:I){
 prec.Sigma2[1:ncU, 1:ncU] ~ dwish(priorR.Sigma2[, ], priorK.Sigma2)
 covariance.b <- inverse(prec.Sigma2[, ])
 beta[1:ncX] ~ dmnorm(priorMean.beta[], priorTau.beta[, ])
-sigma ~ dgamma(priorA.sigma, priorB.sigma)
+sigma ~ invgamma::dinvgamma(priorA.sigma, priorB.sigma)
 # priors for survival parameters
 alpha[1:ncZ] ~ dmnorm(priorMean.alpha[], priorTau.alpha[, ])
 shape ~ dgamma(priorA.shape, priorB.shape)
