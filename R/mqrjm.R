@@ -527,27 +527,13 @@ if(save_va)
   out$median$va1 <- out$mean$va1 <- out$StDev$va1 <- out$Rhat$va1 <- NULL
 
 # names
-names(out$mean$beta) <-
-  names(out$median$beta) <-
-  names(out$modes$beta) <-
-  names(out$StErr$beta) <-
-  names(out$Rhat$beta) <-
-  names(out$StDev$beta) <- colnames(X)
+colnames(out$mean$beta) <-
+  colnames(out$median$beta) <-
+  colnames(out$modes$beta) <-
+  colnames(out$StErr$beta) <-
+  colnames(out$Rhat$beta) <-
+  colnames(out$StDev$beta) <- colnames(X)
 
-if(RE_ind){
-  names(out$mean$covariance.b1) <-
-    names(out$median$covariance.b1) <-
-    names(out$modes$covariance.b1) <-
-    names(out$StErr$covariance.b1) <-
-    names(out$Rhat$covariance.b1) <-
-    names(out$StDev$covariance.b1) <-
-    names(out$mean$covariance.b2) <-
-    names(out$median$covariance.b2) <-
-    names(out$modes$covariance.b2) <-
-    names(out$StErr$covariance.b2) <-
-    names(out$Rhat$covariance.b2) <-
-    names(out$StDev$covariance.b2) <- colnames(U)
-}else{
   colnames(out$mean$covariance.b1) <-
     rownames(out$mean$covariance.b1) <-
     colnames(out$median$covariance.b1) <-
@@ -572,7 +558,6 @@ if(RE_ind){
     rownames(out$StErr$covariance.b2) <-
     colnames(out$StDev$covariance.b2) <-
     rownames(out$StDev$covariance.b2) <- colnames(U)
-}
 
 names(out$mean$alpha) <-
   names(out$median$alpha) <-
