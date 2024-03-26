@@ -128,43 +128,74 @@ mqrjm <- function(formFixed,
     data_long <- cbind(data_long, id = id)
   # use lqmm function to initiated values
   message("Initialisation of longitudinal parameter values using 'lqmm' package.")
-  tmp_model <- lqmm::lqmm(fixed = formFixed,
-                          random = formRandom,
-                          group = id,
-                          tau = tau,
-                          data = data_long)
+  Q <- length(tau)
+  tmp_model <- lqmm(fixed = formFixed,
+                       random = formRandom,
+                       group = id,
+                       tau = tau,
+                       data = data_long)
+  summary(tmp_model[["0.50"]])
   # prior beta parameters
-  priorMean.beta <- t(coef.lqmm(tmp_model))
+  coef(tmp_model)
+  priorMean.beta <- t(coef(tmp_model))
   priorTau.beta <- diag(rep(1/10,length(priorMean.beta[1, ])))
 
-  bis <- as.matrix(lqmm::ranef(tmp_model))
-  bis[abs(bis)<.0001] <- 0
-  initial.values <- list(b = bis,
-                         beta = priorMean.beta,
-                         sigma = tmp_model$scale)
+  init_invsigma <- rep(1, Q)
+  init_b <- array(0, dim = c(Q, dim(ranef(tmp_model)[[1]])))
+  init_beta <- matrix(0, nrow = Q, ncol = ncol(X))
+  for (q in 1:Q){
+    init_invsigma[q] <- tmp_model[[q]]$scale
+    for (u in 1:ncol(U))
+      init_b[q, , u] <- ranef(tmp_model)[[q]][,u]
+    init_beta[q, ] <- coef(tmp_model)[,q]
+  }
+  initial.values <- list(beta = init_beta,
+                         invsigma = init_invsigma)
+  initial.values$b1 <- init_b[1, , ]
+  initial.values$b2 <- init_b[2, , ]
 
   # list of data jags
-  jags.data <- list(y = y,
+  jags.data <- list(y = matrix(rep(y,Q), ncol = Q, byrow = F),
                     X = X,
                     U = U,
                     tau = tau,
                     ncX = ncol(X),
                     ncU = ncol(U),
                     I = I,
+                    Q = Q,
                     offset = offset,
                     priorMean.beta = priorMean.beta,
                     priorTau.beta = priorTau.beta,
-                    priorA.sigma = 1/precision,
-                    priorB.sigma = 1/precision
+                    priorA.invsigma = 1/precision,
+                    priorB.invsigma = 1/precision,
+                    priorR.Sigma2 = diag(rep(1/precision, ncU)),
+                    priorK.Sigma2 = ncU,
+                    mu0 = rep(0, ncU)
   )
 
+  # y = matrix(rep(y,Q), ncol = Q, byrow = F)
+  # X = X
+  # U = U
+  # tau = tau
+  # ncX = ncol(X)
+  # ncU = ncol(U)
+  # I = I
+  # Q = Q
+  # offset = offset
+  # priorMean.beta = priorMean.beta
+  # priorTau.beta = priorTau.beta
+  # priorA.invsigma = 1/precision
+  # priorB.invsigma = 1/precision
+  # priorR.Sigma2 = diag(rep(1/precision, ncU*Q))
+  # priorK.Sigma2 = ncU
+  # mu0 = rep(0, ncU)
 
-    jags.data <- c(jags.data,
-                   list(priorA.Sigma2 = 1/precision,
-                        priorB.Sigma2 = 1/precision
-                   )
-    )
-    initial.values$prec.Sigma2 <- 1/VarCorr(tmp_model)
+  prec.Sigma2 <- diag(1/unlist(VarCorr(tmp_model)))
+
+  initial.values$prec1.Sigma2 <- prec.Sigma2[1:ncU, 1:ncU]
+  initial.values$prec1.Sigma2[initial.values$prec1.Sigma2 > 100] <- 100
+  initial.values$prec2.Sigma2 <- prec.Sigma2[(ncU+1):(2*ncU), (ncU+1):(2*ncU)]
+  initial.values$prec2.Sigma2[initial.values$prec2.Sigma2 > 100] <- 100
 
   #--- survival part
   tmp <- data[c(all.vars(formGroup),all.vars(formSurv))]
@@ -193,16 +224,30 @@ mqrjm <- function(formFixed,
                       ncZ = ncol(Z),
                       priorMean.alpha = priorMean.alpha,
                       priorTau.alpha = priorTau.alpha,
-                      priorTau.alphaA = 1/precision)
+                      priorMean.alpha.assoc = 0,
+                      priorTau.alpha.assoc = 1/precision)
   )
+
+  # C = C
+  # zeros = numeric(nTime)
+  # Time = Time
+  # event = event
+  # Z = Z
+  # ncZ = ncol(Z)
+  # priorMean.alpha = priorMean.alpha
+  # priorTau.alpha = priorTau.alpha
+  # priorMean.alpha.assoc = 0
+  # priorTau.alpha.assoc = 1/precision
+
   # initialisation values of survival parameters
   initial.values$alpha <- c(0, tmp_model$coefficients)
-  # if(survMod=="weibull")
-  #   initial.values$shape <- 1
+
+   if(survMod=="weibull")
+     initial.values$shape <- 1
   # if(param=="value")
     initial.values$alpha.assoc <- 0
   # if(param=="sharedRE")
-    initial.values$alpha.assoc <- rep(0, ncol(U))
+   # initial.values$alpha.assoc <- rep(0, ncol(U))
 
   #--- shared current value case
   data.id <- data_long[!duplicated(id), ]
@@ -257,59 +302,63 @@ mqrjm <- function(formFixed,
 
   # for weibull baseline hazard function and current value as shared association
   # if(param=="value"){
-    # wishart distribution when RE are considered as dependent
     jags_code <- "model{
-    for(q in 1:Q){
-      # constants
-      c1[q] <- (1-2*tau[q])/(tau[q]*(1-tau[q]))
-      c2[q] <- 2/(tau[q]*(1-tau[q]))
+  for(q in 1:Q){
+    # constants
+    c1[q] <- (1-2*tau[q])/(tau[q]*(1-tau[q]))
+    c2[q] <- 2/(tau[q]*(1-tau[q]))
+  }
+
+  # likelihood
+  for (i in 1:I){
+
+    # longitudinal part
+    for(j in offset[i]:(offset[i+1]-1)){
+      # define object
+      W[1, j] ~ dexp(1/sigma[1])
+      W[2, j] ~ dexp(1/sigma[2])
+      prec1[j] <- 1/(W[1, j]*sigma[1]*c2[1])
+      prec2[j] <- 1/(W[2, j]*sigma[2]*c2[2])
+      # quantile distribution for quantile q
+      y[j, 1] ~ dnorm(mu1[j], prec1[j])
+      mu1[j] <- inprod(beta[1, 1:ncX], X[j, 1:ncX]) + inprod(b1[i, 1:ncU], U[j, 1:ncU]) + c1[1]*W[1, j]
+      y[j, 2] ~ dnorm(mu2[j], prec2[j])
+      mu2[j] <- inprod(beta[2, 1:ncX], X[j, 1:ncX]) + inprod(b2[i, 1:ncU], U[j, 1:ncU]) + c1[2]*W[2, j]
+    }#end of j loop
+    # random effects
+    b1[i, 1:ncU] ~ dmnorm(mu0[], prec1.Sigma2[ , ])
+    b2[i, 1:ncU] ~ dmnorm(mu0[], prec2.Sigma2[ , ])
+    # survival part
+    shareQ1[i] <- inprod(beta[1, 1:ncX], Xtime[i, 1:ncX]) + inprod(b1[i, 1:ncU], Utime[i, 1:ncU])
+    shareQ2[i] <- inprod(beta[2, 1:ncX], Xtime[i, 1:ncX]) + inprod(b2[i, 1:ncU], Utime[i, 1:ncU])
+    etaBaseline[i] <- inprod(alpha[1: ncZ], Z[i, 1:ncZ])
+    log_h1[i] <- log(shape) + (shape - 1) * log(Time[i]) + etaBaseline[i] + alpha.assoc * (shareQ2[i] - shareQ1[i])
+    for (k in 1:K) {
+        shareQ1.s[i, k] <- inprod(beta[1, 1:ncX], Xs[K * (i - 1) + k, 1:ncX]) + inprod(b1[i, 1:ncU], Us[K * (i - 1) + k, 1:ncU])
+        shareQ2.s[i, k] <- inprod(beta[2, 1:ncX], Xs[K * (i - 1) + k, 1:ncX]) + inprod(b2[i, 1:ncU], Us[K * (i - 1) + k, 1:ncU])
+        SurvLong[i, k] <- wk[k] * shape * pow(st[i, k], shape - 1) * exp(alpha.assoc * (shareQ2.s[i, k] - shareQ1.s[i, k]) )
     }
 
-    # likelihood
-    for (i in 1:I){
+    log_S1[i] <- (-exp(etaBaseline[i]) * P[i] * sum(SurvLong[i, ]))
+    logL[i] <- event[i]*log_h1[i] + log_S1[i]
+    mlogL[i] <- -logL[i] + C
+    zeros[i] ~ dpois(mlogL[i])
+  }#end of i loop
+  # priors for parameters
+  prec1.Sigma2[1:ncU, 1:ncU] ~ dwish(priorR.Sigma2[, ], priorK.Sigma2)
+  covariance.b1 <- inverse(prec1.Sigma2[ , ])
+  prec2.Sigma2[1:ncU, 1:ncU] ~ dwish(priorR.Sigma2[, ], priorK.Sigma2)
+  covariance.b2 <- inverse(prec2.Sigma2[ , ])
 
-      for(q in 1:Q){
-        # longitudinal part
-        for(j in offset[i]:(offset[i+1]-1)){
-          # define object
-          W[q, j] ~ dexp(1/sigma[q])
-          prec[q,j] <- 1/(W[q, j]*sigma[q]*c2[q])
-          # quantile distribution for quantile q
-          y[q, j] ~ dnorm(mu[q, j], prec[q, j])
-          mu[q, j] <- inprod(beta[q, 1:ncX], X[j, 1:ncX]) + inprod(b[q, i, 1:ncU], U[j, 1:ncU]) + c1[q]*W[q, j]
-        }#end of j loop
-        # random effects
-        b[q, i, 1:ncU] ~ dmnorm(mu0[], prec.Sigma2[q, , ])
-        # survival part
-        shareQ[q, i] <- inprod(beta[q, 1:ncX], Xtime[i, 1:ncX]) + inprod(b[q, i, 1:ncU], Utime[i, 1:ncU])
-      }  #fin boucle sur quantiles
-      etaBaseline[i] <- inprod(alpha[1: ncZ], Z[i, 1:ncZ])
-      log_h1[i] <- log(shape) + (shape - 1) * log(Time[i]) + etaBaseline[i] + alpha.assoc * (shareQ[Q, i] - shareQ[Q-1, i])
-      for (k in 1:K) {
-        for (q in 1:Q){
-          shareQ.s[q, i, k] <- inprod(beta[q, 1:ncX], Xs[K * (i - 1) + k, 1:ncX]) + inprod(b[q, i, 1:ncU], Us[K * (i - 1) + k, 1:ncU])
-        }
-        SurvLong[i, k] <- wk[k] * shape * pow(st[i, k], shape - 1) * exp(alpha.assoc * (shareQ.s[Q, i, k] - shareQ.s[Q-1, i, k]) )
-      }
-
-      log_S1[i] <- (-exp(etaBaseline[i]) * P[i] * sum(SurvLong[i, ]))
-      logL[i] <- event[i]*log_h1[i] + log_S1[i]
-      mlogL[i] <- -logL[i] + C
-      zeros[i] ~ dpois(mlogL[i])
-    }#end of i loop
-    # priors for parameters
-    for (q in 1:Q){
-      prec.Sigma2[q, 1:ncU, 1:ncU] ~ dwish(priorR.Sigma2[, ], priorK.Sigma2)
-      covariance.b[q] <- inverse(prec.Sigma2[q, , ])
-
-      beta[q, 1:ncX] ~ dmnorm(priorMean.beta[q, ], priorTau.beta[, ])
-      invsigma[q] ~ dgamma(priorA.invsigma, priorB.invsigma)
-      sigma[q] <- 1/invsigma[q]
-    }
-    # priors for survival parameters
-    alpha[1:ncZ] ~ dmnorm(priorMean.alpha[], priorTau.alpha[, ])
-    shape ~ dgamma(priorA.shape, priorB.shape)
-    alpha.assoc ~ dnorm(priorMean.alpha.assoc, priorTau.alpha.assoc)
+  for (q in 1:Q){
+  beta[q, 1:ncX] ~ dmnorm(priorMean.beta[q, ], priorTau.beta[, ])
+  invsigma[q] ~ dgamma(priorA.invsigma, priorB.invsigma)
+  sigma[q] <- 1/invsigma[q]
+  }
+  # priors for survival parameters
+  alpha[1:ncZ] ~ dmnorm(priorMean.alpha[], priorTau.alpha[, ])
+  shape ~ dgamma(priorA.shape, priorB.shape)
+  alpha.assoc ~ dnorm(priorMean.alpha.assoc, priorTau.alpha.assoc)
 }"
 
   # replace inprod
@@ -333,7 +382,7 @@ mqrjm <- function(formFixed,
   rplc <- paste(paste("b[i,", 1:jags.data$ncU, "] * Us[K * (i - 1) + k, ", 1:jags.data$ncU, "]", sep = ""), collapse = " + ")
   jags_code <- gsub("inprod(b[i, 1:ncU], Us[K * (i - 1) + k, 1:ncU])", rplc, jags_code, fixed = TRUE)
 
-  }
+  #}
 
 # initialisation values
 if (n.chains == 3)
@@ -344,10 +393,10 @@ if (n.chains == 2)
   inits <- list(initial.values,
                 initial.values)
 if (n.chains == 1)
-  inits <- initial.values
+  inits <- list(initial.values)
 
 # parameters to save in the sampling step
-parms_to_save <- c("alpha", "alpha.assoc", "beta", "sigma", "b", "covariance.b")
+parms_to_save <- c("alpha", "alpha.assoc", "beta", "sigma", "b1", "b2", "covariance.b1", "covariance.b2")
 if (save_va)
   parms_to_save <- c(parms_to_save, "va1")
 
@@ -387,7 +436,7 @@ out$control <- list(formFixed = formFixed,
                     formSurv = formSurv,
                     timeVar = timeVar,
                     tau = tau,
-                    call_function = "qrjm",
+                    call_function = "mqrjm",
                     I = I,
                     C = C,
                     param = param,
@@ -406,23 +455,30 @@ out$control <- list(formFixed = formFixed,
 
 # sims.list output
 out$sims.list <- out_jags$sims.list
-out$sims.list$b <- NULL
+out$sims.list$b1 <- NULL
+out$sims.list$b2 <- NULL
 if(save_va)
   out$sims.list$va1 <- NULL
 
 # random effect output
-out$random_effect <- list(postMeans = out_jags$mean$b,
-                          postSd = out_jags$sd$b)
-colnames(out$random_effect$postMeans) <- colnames(U)
-colnames(out$random_effect$postSd) <- colnames(U)
+out$random_effect <- list(postMeans1 = out_jags$mean$b1,
+                          postMeans2 = out_jags$mean$b2,
+                          postSd1 = out_jags$sd$b1,
+                          postSd2 = out_jags$sd$b2)
+colnames(out$random_effect$postMeans1) <- colnames(U)
+colnames(out$random_effect$postMeans2) <- colnames(U)
+colnames(out$random_effect$postSd1) <- colnames(U)
+colnames(out$random_effect$postSd2) <- colnames(U)
 
 # median : Posterior median of parameters
 out$median <- out_jags$q50
-out$median$b <- NULL
+out$median$b1 <- NULL
+out$median$b2 <- NULL
 
 # mean : Posterior mean of parameters
 out$mean <- out_jags$mean
-out$mean$b <- NULL
+out$mean$b1 <- NULL
+out$mean$b2 <- NULL
 
 # modes of parameters
 out$modes <- lapply(out$sims.list, function(x) {
@@ -458,13 +514,15 @@ out$StErr <- lapply(out$sims.list, function(x) {
 
 # standard deviation of parameters
 out$StDev <- out_jags$sd
-out$StDev$b <- NULL
+out$StDev$b1 <- NULL
+out$StDev$b2 <- NULL
 
 # Rhat : Gelman & Rubin diagnostic
 out$Rhat <- out_jags$Rhat
-out$Rhat$b <- NULL
+out$Rhat$b1 <- NULL
+out$Rhat$b2 <- NULL
 
-# clean regarding auxilary variable (information avalaible in jagsUI output)
+# clean regardiNULL# clean regarding auxilary variable (information avalaible in jagsUI output)
 if(save_va)
   out$median$va1 <- out$mean$va1 <- out$StDev$va1 <- out$Rhat$va1 <- NULL
 
@@ -477,25 +535,43 @@ names(out$mean$beta) <-
   names(out$StDev$beta) <- colnames(X)
 
 if(RE_ind){
-  names(out$mean$covariance.b) <-
-    names(out$median$covariance.b) <-
-    names(out$modes$covariance.b) <-
-    names(out$StErr$covariance.b) <-
-    names(out$Rhat$covariance.b) <-
-    names(out$StDev$covariance.b) <- colnames(U)
+  names(out$mean$covariance.b1) <-
+    names(out$median$covariance.b1) <-
+    names(out$modes$covariance.b1) <-
+    names(out$StErr$covariance.b1) <-
+    names(out$Rhat$covariance.b1) <-
+    names(out$StDev$covariance.b1) <-
+    names(out$mean$covariance.b2) <-
+    names(out$median$covariance.b2) <-
+    names(out$modes$covariance.b2) <-
+    names(out$StErr$covariance.b2) <-
+    names(out$Rhat$covariance.b2) <-
+    names(out$StDev$covariance.b2) <- colnames(U)
 }else{
-  colnames(out$mean$covariance.b) <-
-    rownames(out$mean$covariance.b) <-
-    colnames(out$median$covariance.b) <-
-    rownames(out$median$covariance.b) <-
-    colnames(out$modes$covariance.b) <-
-    rownames(out$modes$covariance.b) <-
-    colnames(out$Rhat$covariance.b) <-
-    rownames(out$Rhat$covariance.b) <-
-    colnames(out$StErr$covariance.b) <-
-    rownames(out$StErr$covariance.b) <-
-    colnames(out$StDev$covariance.b) <-
-    rownames(out$StDev$covariance.b) <- colnames(U)
+  colnames(out$mean$covariance.b1) <-
+    rownames(out$mean$covariance.b1) <-
+    colnames(out$median$covariance.b1) <-
+    rownames(out$median$covariance.b1) <-
+    colnames(out$modes$covariance.b1) <-
+    rownames(out$modes$covariance.b1) <-
+    colnames(out$Rhat$covariance.b1) <-
+    rownames(out$Rhat$covariance.b1) <-
+    colnames(out$StErr$covariance.b1) <-
+    rownames(out$StErr$covariance.b1) <-
+    colnames(out$StDev$covariance.b1) <-
+    rownames(out$StDev$covariance.b1) <-
+    colnames(out$mean$covariance.b2) <-
+    rownames(out$mean$covariance.b2) <-
+    colnames(out$median$covariance.b2) <-
+    rownames(out$median$covariance.b2) <-
+    colnames(out$modes$covariance.b2) <-
+    rownames(out$modes$covariance.b2) <-
+    colnames(out$Rhat$covariance.b2) <-
+    rownames(out$Rhat$covariance.b2) <-
+    colnames(out$StErr$covariance.b2) <-
+    rownames(out$StErr$covariance.b2) <-
+    colnames(out$StDev$covariance.b2) <-
+    rownames(out$StDev$covariance.b2) <- colnames(U)
 }
 
 names(out$mean$alpha) <-
@@ -508,12 +584,13 @@ names(out$mean$alpha) <-
 # credible intervalles
 out$CIs$beta <- cbind(as.vector(t(out_jags$q2.5$beta)),
                       as.vector(t(out_jags$q97.5$beta)))
-rownames(out$CIs$beta) <- colnames(X)
+rownames(out$CIs$beta) <- rep(colnames(X), Q)
 colnames(out$CIs$beta) <- c("2.5%", "97.5%")
 
-out$CIs$sigma <- c(out_jags$q2.5$sigma,
-                   out_jags$q97.5$sigma)
-names(out$CIs$sigma) <- c("2.5%", "97.5%")
+out$CIs$sigma <- cbind(as.vector(t(out_jags$q2.5$sigma)),
+                       as.vector(t(out_jags$q97.5$sigma)))
+rownames(out$CIs$sigma) <- tau
+colnames(out$CIs$sigma) <- c("2.5%", "97.5%")
 
 out$CIs$shape <- c(out_jags$q2.5$shape,
                    out_jags$q97.5$shape)
@@ -543,18 +620,20 @@ rownames(out$CIs$alpha) <- colnames(Z)
 colnames(out$CIs$alpha) <- c("2.5%", "97.5%")
 
 # only for diagonal elements of covariance matrix of random effects
-  out$CIs$variances.b <- cbind(as.vector(out_jags$q2.5$covariance.b),
-                               as.vector(out_jags$q97.5$covariance.b))
+  out$CIs$variances.b1 <- cbind(c(out_jags$q2.5$covariance.b1[1,1], out_jags$q2.5$covariance.b1[Q,Q]),
+                                c(out_jags$q97.5$covariance.b1[1,1], out_jags$q97.5$covariance.b1[Q,Q]))
 
-rownames(out$CIs$variances.b) <- colnames(U)
-colnames(out$CIs$variances.b) <- c("2.5%", "97.5%")
+rownames(out$CIs$variances.b1) <- colnames(U)
+colnames(out$CIs$variances.b1) <- c("2.5%", "97.5%")
 
 # save jags output if requires
 if(save_jagsUI)
   out$out_jagsUI <- out_jags
 
 #---- End of the function defining the class and returning the output
-class(out) <- "Bqrjm"
+class(out) <- "Bmqrjm"
+sink("result.txt")
 out
-
+sink()
 }
+
