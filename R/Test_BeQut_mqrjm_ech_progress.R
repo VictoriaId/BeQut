@@ -62,7 +62,4 @@ jagsUI::traceplot(out_jags, parameters = "covariance.b2")
 jagsUI::traceplot(out_jags, parameters = "shape")
 
 plot(out_jags)
-coda::cumuplot(out)
-coda::gelman.plot(out_jags$sims.list$beta)
-?gelman.plot
-coda::gelman.plot(tmp_model)
+
