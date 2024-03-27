@@ -8,7 +8,9 @@ length(unique(ech_progress$ID))
 library(BeQut)
 library(lqmm)
 
-test_mqrjm <- mqrjm(formFixed = pressure ~ obstime + age + sex,
+ech_progress$pressure_scaled <- ech_progress$pressure / 10
+
+test_mqrjm <- mqrjm(formFixed = pressure_scaled ~ obstime,
                     formRandom = ~ obstime,
                     formGroup = ~ ID,
                     formSurv = Surv(time, event) ~ age + sex,
@@ -19,7 +21,7 @@ test_mqrjm <- mqrjm(formFixed = pressure ~ obstime + age + sex,
                     tau = c(0.5, 0.75),
                     RE_ind = TRUE,
                     n.chains = 3,
-                    n.iter = 5000,
+                    n.iter = 50000,
                     n.burnin = 500,
                     n.thin = 1,
                     n.adapt = 10000,
@@ -30,7 +32,7 @@ test_mqrjm <- mqrjm(formFixed = pressure ~ obstime + age + sex,
                     parallel = FALSE)
 
 
-formFixed = pressure ~ obstime + age + sex
+formFixed = pressure_scaled ~ obstime
 formRandom = ~ obstime
 formGroup = ~ ID
 formSurv = Surv(time, event) ~ age + sex
@@ -41,7 +43,7 @@ data = ech_progress
 tau = c(0.5, 0.75)
 RE_ind = TRUE
 n.chains = 3
-n.iter = 5000
+n.iter = 50000
 n.burnin = 500
 n.thin = 1
 n.adapt = 10000
