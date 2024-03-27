@@ -611,13 +611,19 @@ colnames(out$CIs$alpha) <- c("2.5%", "97.5%")
 rownames(out$CIs$variances.b1) <- colnames(U)
 colnames(out$CIs$variances.b1) <- c("2.5%", "97.5%")
 
+out$CIs$variances.b2 <- cbind(c(out_jags$q2.5$covariance.b2[1,1], out_jags$q2.5$covariance.b2[Q,Q]),
+                              c(out_jags$q97.5$covariance.b2[1,1], out_jags$q97.5$covariance.b2[Q,Q]))
+
+rownames(out$CIs$variances.b2) <- colnames(U)
+colnames(out$CIs$variances.b2) <- c("2.5%", "97.5%")
+
 # save jags output if requires
 if(save_jagsUI)
   out$out_jagsUI <- out_jags
 
 #---- End of the function defining the class and returning the output
 class(out) <- "Bmqrjm"
-sink("result.txt")
+sink("result2.txt")
 out
 sink()
 }
