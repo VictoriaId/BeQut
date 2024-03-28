@@ -1,0 +1,18 @@
+#-- Statistical model: Linear quantile mixed model 
+     - Quantile order:  0.5 
+     - Number of observations:  1199 
+     - Number of statistic units (e.g. subject):  100 
+
+#-- Estimation of longitudinal regression parameters and their credible interval bounds: 
+                 Value        2.5%      97.5%     Rhat
+(Intercept) 13.8326009 13.51898361 14.1461284 1.000030
+obstime      0.1019705  0.02484684  0.1798344 1.000063
+
+#-- Estimation of 'sigma' parameter associated with asymmetric Laplace distribution: 
+          Value      2.5%     97.5%     Rhat
+sigma 0.4689902 0.4416004 0.4978106 1.000043
+
+#-- (Co)variance matrix of the random-effect(s): 
+            (Intercept)    obstime
+(Intercept)    2.247714 0.00000000
+obstime        0.000000 0.08391198
