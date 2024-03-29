@@ -193,9 +193,9 @@ mqrjm <- function(formFixed,
   prec.Sigma2 <- diag(1/unlist(VarCorr(tmp_model)))
 
   initial.values$prec1.Sigma2 <- prec.Sigma2[1:ncU, 1:ncU]
-  initial.values$prec1.Sigma2[initial.values$prec1.Sigma2 > 100] <- 100
+  initial.values$prec1.Sigma2[initial.values$prec1.Sigma2 > 1] <- 1
   initial.values$prec2.Sigma2 <- prec.Sigma2[(ncU+1):(2*ncU), (ncU+1):(2*ncU)]
-  initial.values$prec2.Sigma2[initial.values$prec2.Sigma2 > 100] <- 100
+  initial.values$prec2.Sigma2[initial.values$prec2.Sigma2 > 1] <- 1
 
   #--- survival part
   tmp <- data[c(all.vars(formGroup),all.vars(formSurv))]
