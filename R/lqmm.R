@@ -128,20 +128,7 @@ lqmm <- function(formFixed,
                     priorTau.beta = priorTau.beta,
                     priorA.sigma = 1/precision,
                     priorB.sigma = 1/precision
-                    )
-
-  # y = y
-  # X = X
-  # U = U
-  # tau = tau
-  # ncX = ncol(X)
-  # ncU = ncol(U)
-  # I = I
-  # offset = offset
-  # priorMean.beta = priorMean.beta
-  # priorTau.beta = priorTau.beta
-  # priorA.sigma = 1/precision
-  # priorB.sigma = 1/precision
+  )
 
   if(jags.data$ncU==1)
     RE_ind <- TRUE
@@ -149,25 +136,20 @@ lqmm <- function(formFixed,
     jags.data <- c(jags.data,
                    list(priorA.Sigma2 = 1/precision,
                         priorB.Sigma2 = 1/precision)
-                   )
-    # priorA.Sigma2 = 1/precision
-    # priorB.Sigma2 = 1/precision
+    )
     initial.values$prec.Sigma2 <- 1/VarCorr(tmp_model)
   }else{
     jags.data <- c(jags.data,
                    list(priorR.Sigma2 = diag(rep(1/precision, ncol(U))),
                         priorK.Sigma2 = ncol(U),
                         mu0 = rep(0, ncol(U))
-                        )
                    )
-    # priorR.Sigma2 = diag(rep(1/precision, ncol(U)))
-    # priorK.Sigma2 = ncol(U)
-    # mu0 = rep(0, ncol(U))
+    )
     initial.values$prec.Sigma2 <- diag(1/VarCorr(tmp_model))
   }
 
   #---- write jags model in txt from R function
-  # if(RE_ind){
+  if(RE_ind){
     jags_code <- "model{
   # constants
   c1 <- (1-2*tau)/(tau*(1-tau))
@@ -194,6 +176,30 @@ lqmm <- function(formFixed,
   beta[1:ncX] ~ dmnorm(priorMean.beta[], priorTau.beta[, ])
   sigma ~ dgamma(priorA.sigma, priorB.sigma)
 }"
+  }else{
+    jags_code <- "model{
+  # constants
+  c1 <- (1-2*tau)/(tau*(1-tau))
+  c2 <- 2/(tau*(1-tau))
+  # likelihood
+  for (i in 1:I){
+    # longitudinal part
+    for(j in offset[i]:(offset[i+1]-1)){
+      y[j] ~ dnorm(mu[j], prec[j])
+      va1[j] ~ dexp(1/sigma)
+      prec[j] <- 1/(sigma*c2*va1[j])
+      mu[j] <- inprod(beta[1:ncX], X[j, 1:ncX]) + inprod(b[i, 1:ncU], U[j, 1:ncU]) + c1*va1[j]
+    }#end of j loop
+    # random effects
+    b[i, 1:ncU] ~ dmnorm(mu0[], prec.Sigma2[, ])
+  }#end of i loop
+  # priors for parameters
+  prec.Sigma2[1:ncU, 1:ncU] ~ dwish(priorR.Sigma2[, ], priorK.Sigma2)
+  covariance.b <- inverse(prec.Sigma2[, ])
+  beta[1:ncX] ~ dmnorm(priorMean.beta[], priorTau.beta[, ])
+  sigma ~ dgamma(priorA.sigma, priorB.sigma)
+}"
+  }
 
   # regression from X
   rplc <- paste(paste("beta[", 1:jags.data$ncX, "] * X[j, ", 1:jags.data$ncX, "]", sep = ""), collapse = " + ")
@@ -211,7 +217,7 @@ lqmm <- function(formFixed,
     inits <- list(initial.values,
                   initial.values)
   if(n.chains==1)
-    inits <- list(initial.values)
+    inits <- initial.values
 
 
   # parameters to save in the sampling step
@@ -350,11 +356,11 @@ lqmm <- function(formFixed,
   if(RE_ind){
     out$CIs$covariance.b <- cbind(as.vector(t(out_jags$q2.5$covariance.b)),
                                   as.vector(t(out_jags$q97.5$covariance.b)))
-    rownames(out$CIs$covariance.b) <- colnames(U)
+    rownames(out$CIs$covariance.b) <- colnames(X)
     colnames(out$CIs$covariance.b) <- c("2.5%", "97.5%")
   }else{
     out$CIs$covariance.b <- cbind(as.vector(diag(out_jags$q2.5$covariance.b)),
-                                 as.vector(diag(out_jags$q97.5$covariance.b)))
+                                  as.vector(diag(out_jags$q97.5$covariance.b)))
     rownames(out$CIs$covariance.b) <- colnames(U)
     colnames(out$CIs$covariance.b) <- c("2.5%", "97.5%")
   }
@@ -367,4 +373,4 @@ lqmm <- function(formFixed,
   class(out) <- "Blqmm"
   out
 
-  }
+}
